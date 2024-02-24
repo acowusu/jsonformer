@@ -24,6 +24,7 @@ class Jsonformer:
         *,
         debug: bool = False,
         max_array_length: int = 10,
+        min_array_length: int = 10,
         max_number_tokens: int = 6,
         temperature: float = 1.0,
         max_string_token_length: int = 10,
@@ -38,6 +39,7 @@ class Jsonformer:
         self.generation_marker = "|GENERATION|"
         self.debug_on = debug
         self.max_array_length = max_array_length
+        self.min_array_length = min_array_length
 
         self.max_number_tokens = max_number_tokens
         self.temperature = temperature
@@ -175,7 +177,7 @@ class Jsonformer:
         elif schema_type == "array":
             new_array = []
             obj[key] = new_array
-            return self.generate_array(schema["items"], new_array)
+            return self.generate_array(schema["items"], new_array, schema["min"], schema["max"])
         elif schema_type == "object":
             new_obj = {}
             if key:
@@ -186,8 +188,12 @@ class Jsonformer:
         else:
             raise ValueError(f"Unsupported schema type: {schema_type}")
 
-    def generate_array(self, item_schema: Dict[str, Any], obj: Dict[str, Any]) -> list:
-        for _ in range(self.max_array_length):
+    def generate_array(self, item_schema: Dict[str, Any], obj: Dict[str, Any], min:int  = -1 , max:int = -1) -> list:
+        if min == -1:
+            min = self.min_array_length
+        if max == -1:
+            max = self.max_array_length
+        for _ in range(max):
             # forces array to have at least one element
             element = self.generate_value(item_schema, obj)
             obj[-1] = element
@@ -211,7 +217,7 @@ class Jsonformer:
                 if ',' in decoded_token:
                     found_comma = True
                     break
-                if ']' in decoded_token:
+                if ']' in decoded_token and len(obj) >= min:
                     found_close_bracket = True
                     break
 
@@ -238,8 +244,14 @@ class Jsonformer:
         return prompt
 
     def __call__(self) -> Dict[str, Any]:
-        self.value = {}
-        generated_data = self.generate_object(
-            self.json_schema["properties"], self.value
-        )
+        if self.json_schema["type"] == "object":
+            self.value = {}
+            generated_data = self.generate_object(
+                self.json_schema["properties"], self.value
+            )
+        elif self.json_schema["type"] == "array":
+            self.value = []
+            generated_data = self.generate_array(
+                self.json_schema["items"], self.value, self.json_schema["min"], self.json_schema["max"]
+            )
         return generated_data
