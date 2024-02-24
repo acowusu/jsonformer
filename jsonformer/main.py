@@ -206,7 +206,7 @@ class Jsonformer:
             logits = output.logits[0, -1]
 
 
-            top_indices = logits.topk(30).indices
+            top_indices = logits.topk(100).indices
             sorted_token_ids = top_indices[logits[top_indices].argsort(descending=True)]
 
             found_comma = False
